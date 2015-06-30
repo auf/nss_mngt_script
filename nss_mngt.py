@@ -9,6 +9,10 @@ import MySQLdb as mdb
 
 class Options_parser():
 
+	"""
+	Class for command line options
+	"""
+
         def __init__(self):
 	        self.parser = argparse.ArgumentParser(description='Script to manage user db')
 		# DB Credentials #################################################
@@ -40,6 +44,11 @@ class Options_parser():
 
 class DB():
 
+	"""
+	This class contains the database connection credentials and all sql requests
+	"""
+
+	#DB connection test
     	def __init__(self, admindb, passdb, hostname, dbname ):
 		
         	if not dbname:
@@ -52,7 +61,7 @@ class DB():
 		except mdb.Error:
 			sys.exit("Invalid connect parameters")
 		
-	#Test Debug
+	#Debug Method
 	def version(self):
 	    	query = "SELECT VERSION()"
 		self.cur.execute(query)
@@ -60,6 +69,7 @@ class DB():
     		print "MySQL version: %s" % \
         	self.result
 
+	# Create group if it does not exists
 	def creategroup(self, groupname):
                 sql="SELECT gid FROM groups WHERE name=%s"
                 self.cur.execute(sql,(groupname))
@@ -75,8 +85,8 @@ class DB():
                 else:
                         print 'This group allready exists :',groupname
 
+	# Disable user if present in DB
 	def disable_db_user(self, username, system_date):
-
                 sql="SELECT UID FROM users WHERE username=%s"
                 self.cur.execute(sql,(username))
                 userexists = self.cur.fetchall()
@@ -87,6 +97,7 @@ class DB():
                 else:
                         print 'This account does not exist : ',username
 
+	#Check if user exists in DB
 	def user_exists(self, username):
 		sql="SELECT UID FROM users WHERE username=%s"
                 self.cur.execute(sql,(username))
@@ -97,6 +108,7 @@ class DB():
 			result = 'False'
 		return result
 
+	#Check if gid1 exists in DB
 	def g1_exists(self, gid1):
                 sql="SELECT gid FROM groups WHERE gid=%s"
                 self.cur.execute(sql,(gid1))
@@ -107,12 +119,14 @@ class DB():
                         result = 'False'
                 return result
 	
+	#Return existing gid1 value
 	def g1_old(self, username):
                 sql="SELECT GID FROM users WHERE username=%s"
                 self.cur.execute(sql,(username))
                 gid1 = self.cur.fetchone()[0]
 		return gid1
 
+	#Return existing password value
 	def passwd_old(self, username):
                 sql="SELECT password FROM users WHERE username=%s"
                 self.cur.execute(sql,(username))
@@ -144,6 +158,7 @@ class DB():
                 sql="DELETE FROM grouplist WHERE username=%s"
                 self.cur.execute(sql,(username))
 
+	#Check if gid2 exists in DB
 	def g2_exists(self, gid2):
                 sql="SELECT gid FROM groups WHERE gid=%s"
                 self.cur.execute(sql,(gid2))
@@ -154,8 +169,8 @@ class DB():
                         result = 'False'
                 return result
 
+	#Add user to secondary group
 	def g2_add_user(self, gid2, username):
-
              	#Check if user alredy belongs to the group
                 sql="SELECT id FROM grouplist WHERE gid=%s AND username=%s"
                 self.cur.execute(sql,(gid2,username))
@@ -183,8 +198,6 @@ class DB():
 optionClass = Options_parser()
 db = DB(optionClass.admindb, optionClass.passdb, optionClass.hostname, optionClass.database)
 
-##################################################################
-
 def defining_password():
         passwd ='1'
         passwdcheck ='2'
@@ -211,43 +224,60 @@ def username_check(username):
         if not username:
                 print 'You need to specify a username'
                 sys.exit(1)
-        #Regex mot de passe
+        #Regex username
         if not re.match("^[a-z.]+$", username):
                 print 'Invalid username : '+username
                 sys.exit(1)
 
+def gid_check(gid):
+        if not re.match("^-?[0-9]+$", gid):
+		print 'GID must be an integer, this value is invalid : ',gid
+                sys.exit(1)
+	
+
 def main():
+
+	#Defining variables
 	system_date = date()
 	username = optionClass.username
 	g2_update = ''
 
+	#Create new group
 	if optionClass.creategroup:
 		groupname=optionClass.creategroup
+		#Error if SQL injection
+		username_check(groupname)
 		db.creategroup(groupname)
 		db.close()
                 sys.exit(0)
 
+#########################################################################################
+	#Error if SQL injection and if username empty
 	username_check(username)
+	home_directory = home_dir(username)
 
+	#Disable user
 	if optionClass.disable:
 		db.disable_db_user(username, system_date)
 		db.close()
 		sys.exit(0)
 
-#########################################################################################
-	home_directory = home_dir(username)
-	#Check if user exists
+	#Check if user exists in DB
 	userExists = db.user_exists(username)
+
+	#Ask for password in case of user creation or update
         if optionClass.password or userExists is 'False':
                 hashed_password = defining_password()
 	else:
 		hashed_password = db.passwd_old(username)
 
-	## Check if gid1 exists
+	## Check if gid1 exists or empty
         if not optionClass.group1:
         	gid1 = ''
 	else:
             	gid1 = optionClass.group1
+		#Check if gid1 is integer
+		gid_check(gid1)
                 g1Exists = db.g1_exists(gid1)
                 if g1Exists is 'False':
                 	print "This group does not exists : "+gid1
@@ -265,6 +295,7 @@ def main():
 			gid1 = '5000'
 		uid,gid1 = db.create_db_user(username, home_directory, hashed_password, gid1, system_date)	
 
+	#Tips to delete all user secondary groups
 	if optionClass.group2 == 'delete':
 		db.g2_delete(username)
                 print 'All secondary groups deleted for user : '+username
@@ -273,13 +304,14 @@ def main():
 		#Check if gid2 exists
 		if optionClass.group2:
         	        gid2 = optionClass.group2
+			#Check if gid2 is integer
+			gid_check(gid2)
                 	g2Exists = db.g2_exists(gid2)
 	                if g2Exists is 'False':
         	                print "This group does not exists : "+gid2
 			else:
 				g2_update = db.g2_add_user(gid2, username)
 	db.close()
-
 
 	#Output
 	if userExists is 'True':
@@ -295,5 +327,6 @@ def main():
         print 'Homedir : '+home_directory
         print 'Modification date : '+system_date
         print '--------------------------------------------------------------------'
+
 
 main()
