@@ -6,6 +6,7 @@ import argparse
 import getpass
 import sys, commands
 import MySQLdb as mdb
+import random, crypt
 
 class Options_parser():
 
@@ -198,6 +199,7 @@ class DB():
 optionClass = Options_parser()
 db = DB(optionClass.admindb, optionClass.passdb, optionClass.hostname, optionClass.database)
 
+
 def defining_password():
         passwd ='1'
         passwdcheck ='2'
@@ -208,9 +210,14 @@ def defining_password():
                 passwd = getpass.getpass()
                 print 'Check your password:'
                 passwdcheck = getpass.getpass()
-        #hachage du mot de passe
-        hashStatus, hashOutput = commands.getstatusoutput('mkpasswd -m md5 %s'+ passwd)
-        return (hashOutput)
+
+    	if passwd in ( None, '', 'x' ):
+        	return "x" # mot de passe "invalide"
+    	else:
+        	salt = "$1$" + '' \
+               	.join( [ random.choice( 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ' )
+                for i in xrange(8) ])
+        return crypt.crypt( passwd, salt )
 
 def home_dir(username):
 	home = '/home/'+username
